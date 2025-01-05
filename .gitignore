@@ -1,0 +1,8 @@
+venv
+conf.py
+*.log
+*.pyc
+datas
+.DS_Store
+chrome_profile
+tmp_img
