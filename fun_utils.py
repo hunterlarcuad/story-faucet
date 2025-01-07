@@ -271,11 +271,35 @@ def time_difference(input_time_str):
 
     return time_diff_seconds
 
+
 def extract_numbers(s):
     # 使用正则表达式找到所有的数字
     numbers = re.findall(r'\d+', s)
     # 将找到的数字字符串转换为整数
     return [int(num) for num in numbers]
+
+
+def seconds_to_hms(seconds):
+    """
+    Convert seconds to hours, minutes, and seconds.
+    Args:
+    - seconds (int): The number of seconds to convert.
+    Returns:
+    - str: A string representing the time in the format "xx小时xx分钟xx秒".
+      Hours and minutes are omitted if they are zero.
+    """
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    seconds = seconds % 60
+
+    parts = []
+    if hours > 0:
+        parts.append(f"{hours}小时")
+    if minutes > 0 or (hours > 0 and seconds > 0):
+        parts.append(f"{minutes}分钟")
+    parts.append(f"{seconds}秒")
+
+    return ''.join(parts)
 
 
 if __name__ == "__main__":

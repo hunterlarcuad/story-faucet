@@ -19,12 +19,13 @@ pip install -r requirements.txt
 
 # Plugin
 ```
-cd botanix_auto/extensions/
+cd ./extensions/
 unzip okx.crx -d okx/
+unzip CapMonster.crx -d CapMonster/
 ```
 
 # Run
 ```
 cp conf.py.sample conf.py
-python3 story.py
+python story.py
 ```

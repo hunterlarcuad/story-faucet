@@ -25,6 +25,7 @@ from fun_utils import save2file
 from fun_utils import format_ts
 from fun_utils import time_difference
 from fun_utils import extract_numbers
+from fun_utils import seconds_to_hms
 
 from auto_utils import get_window_size
 from auto_utils import auto_click
@@ -41,6 +42,11 @@ from conf import DEF_PATH_DATA_STATUS
 from conf import DEF_HEADER_STATUS
 from conf import DEF_OKX_EXTENSION_PATH
 from conf import EXTENSION_ID_OKX
+
+from conf import DEF_CAPMONSTER_EXTENSION_PATH
+from conf import EXTENSION_ID_CAPMONSTER
+from conf import DEF_CAPMONSTER_KEY
+
 from conf import DEF_PWD
 from conf import DEF_FEE_MAX_BASE
 from conf import DEF_FEE_PRIORITY
@@ -166,16 +172,8 @@ class StoryTask():
         co.set_user_data_path(path=DEF_PATH_USER_DATA)
         co.set_user(user=profile_path)
 
-        # 获取当前工作目录
-        current_directory = os.getcwd()
-
-        # 检查目录是否存在
-        if os.path.exists(os.path.join(current_directory, DEF_OKX_EXTENSION_PATH)): # noqa
-            logger.info(f'okx plugin path: {DEF_OKX_EXTENSION_PATH}')
-            co.add_extension(DEF_OKX_EXTENSION_PATH)
-        else:
-            print("okx plugin directory is not exist. Exit!")
-            sys.exit(1)
+        self.load_extension(co, DEF_OKX_EXTENSION_PATH)
+        self.load_extension(co, DEF_CAPMONSTER_EXTENSION_PATH)
 
         # https://drissionpage.cn/ChromiumPage/browser_opt
         co.headless(DEF_USE_HEADLESS)
@@ -190,6 +188,20 @@ class StoryTask():
 
         self.page.wait.load_start()
         # self.page.wait(2)
+
+        self.init_capmonster()
+
+    def load_extension(self, co, extersion_path):
+        # 获取当前工作目录
+        current_directory = os.getcwd()
+
+        # 检查目录是否存在
+        if os.path.exists(os.path.join(current_directory, extersion_path)): # noqa
+            logger.info(f'okx plugin path: {extersion_path}')
+            co.add_extension(extersion_path)
+        else:
+            print(f'{extersion_path} plugin directory is not exist. Exit!')
+            sys.exit(1)
 
     def logit(self, func_name=None, s_info=None):
         s_text = f'{self.args.s_profile}'
@@ -271,6 +283,96 @@ class StoryTask():
             self.logit(None, f'Keeped tab: {self.page.title}')
             return True
         return False
+
+    def init_capmonster(self):
+        """
+        chrome-extension://jiofmdifioeejeilfkpegipdjiopiekl/popup/index.html
+        """
+        s_url = f'chrome-extension://{EXTENSION_ID_CAPMONSTER}/popup.html'
+        self.page.get(s_url)
+        # self.page.wait.load_start()
+        self.page.wait(3)
+
+        def get_balance():
+            """
+            Balance: $0.9987
+            Balance: Wrong key
+            """
+            self.page.wait(1)
+            ele_info = self.page.ele('tag:div@@class=sc-bdvvtL dTzMWc', timeout=2) # noqa
+            if not isinstance(ele_info, NoneElement):
+                s_info = ele_info.text
+                logger.info(f'{s_info}')
+                self.logit('init_capmonster', f'CapMonster {s_info}')
+                if s_info.find('$') >= 0:
+                    return True
+                if s_info.find('Wrong key') >= 0:
+                    return False
+            return False
+
+        def click_checkbox(s_value):
+            ele_input = self.page.ele(f'tag:input@@value={s_value}', timeout=2)
+            if not isinstance(ele_input, NoneElement):
+                if ele_input.states.is_checked is True:
+                    ele_input.click(by_js=True)
+                    self.logit(None, f'cancel checkbox {s_value}')
+                    return True
+            return False
+
+        def cancel_checkbox():
+            lst_text = [
+                'ReCaptcha2',
+                'ReCaptcha3',
+                'ReCaptchaEnterprise',
+                'GeeTest',
+                'ImageToText',
+                'BLS',
+            ]
+            for s_value in lst_text:
+                click_checkbox(s_value)
+
+        self.save_screenshot(name='capmonster_1.jpg')
+
+        if get_balance():
+            return True
+
+        ele_block = self.page.ele('tag:div@@class=sc-bdvvtL ehUtQX', timeout=2)
+        if isinstance(ele_block, NoneElement):
+            self.logit('init_capmonster', 'API-key block is not found')
+            return False
+        self.logit('init_capmonster', None)
+
+        ele_input = ele_block.ele('tag:input')
+        if not isinstance(ele_input, NoneElement):
+            if ele_input.value == DEF_CAPMONSTER_KEY:
+                self.logit(None, 'init_capmonster has been initialized before')
+                return True
+            if len(ele_input.value) > 0 and ele_input.value != DEF_CAPMONSTER_KEY: # noqa
+                ele_input.click.multi(times=2)
+                ele_input.clear(by_js=True)
+                # self.page.actions.type('BACKSPACE')
+            self.page.actions.move_to(ele_input).click().type(DEF_CAPMONSTER_KEY) # noqa
+            self.page.wait(1)
+            ele_btn = ele_block.ele('tag:button')
+            if not isinstance(ele_btn, NoneElement):
+                if ele_btn.states.is_enabled is False:
+                    self.logit(None, 'The Save Button is_enabled=False')
+                else:
+                    ele_btn.click(by_js=True)
+                    self.page.wait(1)
+                    self.logit(None, 'Saved capmonster_key [OK]')
+                    cancel_checkbox()
+                    if get_balance():
+                        return True
+            else:
+                self.logit(None, 'the save button is not found')
+                return False
+        else:
+            self.logit(None, 'the input element is not found')
+            return False
+
+        logger.info('capmonster init success')
+        self.save_screenshot(name='capmonster_2.jpg')
 
     def okx_secure_wallet(self):
         # Secure your wallet
@@ -677,7 +779,7 @@ class StoryTask():
                 if not isinstance(button, NoneElement):
                     break
                 self.page.wait(1)
-                auto_click()
+                # auto_click()
             if i >= max_wait_sec:
                 self.logit(None, f'{i}/{max_wait_sec} Verify Failed') # noqa
                 continue
@@ -778,6 +880,36 @@ def main(args):
     n = 0
 
     lst_success = []
+
+    lst_wait = []
+    # 将已完成的剔除掉
+    instStoryTask.status_load()
+    # 从后向前遍历列表的索引
+    for i in range(len(profiles) - 1, -1, -1):
+        s_profile = profiles[i]
+        if s_profile in instStoryTask.dic_status:
+            lst_status = instStoryTask.dic_status[s_profile]
+            if lst_status:
+                avail_time = lst_status[1]
+                if avail_time:
+
+                    n_sec_wait = time_difference(avail_time) + 1
+                    if n_sec_wait > 0:
+                        lst_wait.append([s_profile, n_sec_wait])
+                        # logger.info(f'[{s_profile}] 还需等待{n_sec_wait}秒') # noqa
+                        n += 1
+                        profiles.pop(i)
+        else:
+            continue
+    logger.info('#'*40)
+    if len(lst_wait) > 0:
+        n_top = 5
+        logger.info(f'***** Top {n_top} wait list')
+        sorted_lst_wait = sorted(lst_wait, key=lambda x: x[1], reverse=True)
+        for (s_profile, n_sec_wait) in sorted_lst_wait[:n_top]:
+            logger.info(f'[{s_profile}] 还需等待{seconds_to_hms(n_sec_wait)}') # noqa
+    percent = math.floor((n / total) * 100)
+    logger.info(f'Progress: {percent}% [{n}/{total}]') # noqa
 
     while profiles:
         n += 1
